@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel — FoodHub</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px">
+    <div>
+      <h2>Admin Panel</h2>
+      <p style="color:var(--ink-3);font-size:14px;margin-top:4px">Manage restaurants, menu items and orders</p>
+    </div>
+    <span class="badge badge-brand" style="font-size:13px;padding:6px 14px">⚙️ Admin</span>
+  </div>
+
+  <!-- Stats -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:32px" id="stats-grid">
+    <div class="admin-stat"><div class="admin-stat__val" id="s-orders">—</div><div class="admin-stat__label">Total Orders</div></div>
+    <div class="admin-stat" style="border-color:var(--green)"><div class="admin-stat__val" id="s-delivered">—</div><div class="admin-stat__label">Delivered</div></div>
+    <div class="admin-stat" style="border-color:var(--amber)"><div class="admin-stat__val" id="s-pending">—</div><div class="admin-stat__label">Pending</div></div>
+    <div class="admin-stat" style="border-color:#7C3AED"><div class="admin-stat__val" id="s-restaurants">—</div><div class="admin-stat__label">Restaurants</div></div>
+  </div>
+
+  <!-- Tabs -->
+  <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px">
+    <button class="admin-tab active" onclick="switchTab('orders')" id="tab-orders">Orders</button>
+    <button class="admin-tab" onclick="switchTab('restaurants')" id="tab-restaurants">Restaurants</button>
+    <button class="admin-tab" onclick="switchTab('items')" id="tab-items">Food Items</button>
+  </div>
+
+  <div id="tab-content">
+    <div class="loading-page"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- Restaurant modal -->
+<div class="modal-overlay" id="restaurant-modal">
+  <div class="modal">
+    <div class="modal__head">
+      <h3 id="rm-title">Add Restaurant</h3>
+      <button class="modal__close" onclick="closeModal('restaurant-modal')">✕</button>
+    </div>
+    <form onsubmit="saveRestaurant(event)">
+      <input type="hidden" id="rm-id">
+      <div class="form-group"><label class="form-label">Name*</label><input class="form-input" id="rm-name" required></div>
+      <div class="form-group"><label class="form-label">Location</label><input class="form-input" id="rm-location"></div>
+      <div class="form-group"><label class="form-label">Category</label><input class="form-input" id="rm-category" placeholder="Biryani, Pizza, Burgers…"></div>
+      <div class="form-group"><label class="form-label">Rating (0-5)</label><input class="form-input" id="rm-rating" type="number" min="0" max="5" step="0.1" value="4.0"></div>
+      <div class="form-group"><label class="form-label">Image URL</label><input class="form-input" id="rm-image" placeholder="https://images.unsplash.com/…"></div>
+      <div class="form-group"><label class="form-label">Description</label><textarea class="form-input" id="rm-desc" rows="2" style="resize:none"></textarea></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('restaurant-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="rm-save-btn">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Food item modal -->
+<div class="modal-overlay" id="item-modal">
+  <div class="modal">
+    <div class="modal__head">
+      <h3 id="im-title">Add Food Item</h3>
+      <button class="modal__close" onclick="closeModal('item-modal')">✕</button>
+    </div>
+    <form onsubmit="saveItem(event)">
+      <input type="hidden" id="im-id">
+      <div class="form-group">
+        <label class="form-label">Restaurant*</label>
+        <select class="form-input" id="im-restaurant" required style="font-size:14px"></select>
+      </div>
+      <div class="form-group"><label class="form-label">Name*</label><input class="form-input" id="im-name" required></div>
+      <div class="form-group"><label class="form-label">Price (৳)*</label><input class="form-input" id="im-price" type="number" min="0" step="1" required></div>
+      <div class="form-group"><label class="form-label">Category</label><input class="form-input" id="im-category" placeholder="Main, Sides, Drinks…"></div>
+      <div class="form-group"><label class="form-label">Description</label><textarea class="form-input" id="im-desc" rows="2" style="resize:none"></textarea></div>
+      <div class="form-group"><label class="form-label">Image URL</label><input class="form-input" id="im-image"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('item-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="im-save-btn">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+  .admin-tab {
+    padding: 10px 20px; font-size: 14px; font-weight: 600;
+    background: none; border: none; color: var(--ink-3); cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .15s;
+  }
+  .admin-tab:hover { color: var(--ink-2); }
+  .admin-tab.active { color: var(--brand); border-bottom-color: var(--brand); }
+</style>
+
+<script src="../js/api.js"></script>
+<script>
+  renderNavbar('..');
+  if (!requireAdmin()) void 0;
+
+  let currentTab = 'orders';
+  let allRestaurantsCache = [];
+
+  async function init() {
+    await loadStats();
+    switchTab('orders');
+  }
+
+  async function loadStats() {
+    try {
+      const [orders, restaurants] = await Promise.all([api.get('/orders'), api.get('/restaurants')]);
+      document.getElementById('s-orders').textContent = orders.length;
+      document.getElementById('s-delivered').textContent = orders.filter(o => o.status === 'delivered').length;
+      document.getElementById('s-pending').textContent = orders.filter(o => o.status === 'pending').length;
+      document.getElementById('s-restaurants').textContent = restaurants.length;
+      allRestaurantsCache = restaurants;
+    } catch(e) {}
+  }
+
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    loadTab(tab);
+  }
+
+  async function loadTab(tab) {
+    const content = document.getElementById('tab-content');
+    content.innerHTML = '<div class="loading-page"><div class="spinner"></div></div>';
+    try {
+      if (tab === 'orders') await renderOrders();
+      else if (tab === 'restaurants') await renderRestaurants();
+      else if (tab === 'items') await renderItems();
+    } catch(e) {
+      content.innerHTML = `<div class="empty-state"><div class="empty-state__icon">⚠️</div><h3>Error loading data</h3><p>${e.message}</p></div>`;
+    }
+  }
+
+  // ── Orders tab ─────────────────────────────────────────────
+  async function renderOrders() {
+    const orders = await api.get('/orders');
+    const content = document.getElementById('tab-content');
+    if (!orders.length) {
+      content.innerHTML = `<div class="empty-state"><div class="empty-state__icon">📦</div><h3>No orders yet</h3></div>`;
+      return;
+    }
+    content.innerHTML = `
+      <div style="overflow-x:auto">
+        <table class="admin-table">
+          <thead>
+            <tr><th>Order ID</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th><th>Date</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            ${orders.map(o => `
+              <tr>
+                <td><strong>#${o.order_id}</strong></td>
+                <td style="font-size:13px;color:var(--ink-3)">User #${o.user_id}</td>
+                <td style="font-size:13px">${(o.items||[]).length} item(s)</td>
+                <td style="font-weight:700;color:var(--brand)">৳${o.total_price.toFixed(0)}</td>
+                <td><span class="badge ${`status-${o.status}`}">${statusLabel(o.status)}</span></td>
+                <td style="font-size:12px;color:var(--ink-3)">${new Date(o.created_at).toLocaleDateString()}</td>
+                <td>
+                  <select onchange="updateOrderStatus(${o.order_id}, this.value)" style="padding:5px 8px;border-radius:6px;border:1px solid var(--border);font-size:12px;background:var(--surface);cursor:pointer">
+                    <option value="">Change status</option>
+                    <option value="pending">Pending</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="preparing">Preparing</option>
+                    <option value="out_for_delivery">On the way</option>
+                    <option value="delivered">Delivered</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  async function updateOrderStatus(oid, status) {
+    if (!status) return;
+    try {
+      await api.put(`/orders/${oid}/status`, { status });
+      showToast(`Order #${oid} marked as ${statusLabel(status)}`, 'success');
+      renderOrders();
+      loadStats();
+    } catch(e) { showToast(e.message, 'error'); }
+  }
+
+  // ── Restaurants tab ────────────────────────────────────────
+  async function renderRestaurants() {
+    const list = await api.get('/restaurants');
+    allRestaurantsCache = list;
+    const content = document.getElementById('tab-content');
+    content.innerHTML = `
+      <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+        <button class="btn btn-primary btn-sm" onclick="openRestaurantModal()">+ Add Restaurant</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="admin-table">
+          <thead><tr><th>Name</th><th>Category</th><th>Location</th><th>Rating</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${list.map(r => `
+              <tr>
+                <td>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <img src="${r.image_url || ''}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;background:var(--surface-3)">
+                    <strong>${r.name}</strong>
+                  </div>
+                </td>
+                <td><span class="badge badge-brand" style="font-size:11px">${r.category || '—'}</span></td>
+                <td style="font-size:13px;color:var(--ink-3)">${r.location || '—'}</td>
+                <td><span style="color:var(--amber);font-weight:600">★ ${r.rating.toFixed(1)}</span></td>
+                <td>${r.is_open ? '<span class="badge badge-green">Open</span>' : '<span class="badge badge-gray">Closed</span>'}</td>
+                <td>
+                  <div style="display:flex;gap:6px">
+                    <button class="btn btn-ghost btn-sm" onclick="editRestaurant(${JSON.stringify(r).replace(/"/g,'&quot;')})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteRestaurant(${r.restaurant_id})">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  function openRestaurantModal(r = null) {
+    document.getElementById('rm-title').textContent = r ? 'Edit Restaurant' : 'Add Restaurant';
+    document.getElementById('rm-id').value       = r?.restaurant_id || '';
+    document.getElementById('rm-name').value     = r?.name || '';
+    document.getElementById('rm-location').value = r?.location || '';
+    document.getElementById('rm-category').value = r?.category || '';
+    document.getElementById('rm-rating').value   = r?.rating || 4.0;
+    document.getElementById('rm-image').value    = r?.image_url || '';
+    document.getElementById('rm-desc').value     = r?.description || '';
+    document.getElementById('restaurant-modal').classList.add('open');
+  }
+
+  function editRestaurant(r) { openRestaurantModal(r); }
+
+  async function saveRestaurant(e) {
+    e.preventDefault();
+    const id = document.getElementById('rm-id').value;
+    const body = {
+      name: document.getElementById('rm-name').value,
+      location: document.getElementById('rm-location').value,
+      category: document.getElementById('rm-category').value,
+      rating: parseFloat(document.getElementById('rm-rating').value),
+      image_url: document.getElementById('rm-image').value,
+      description: document.getElementById('rm-desc').value,
+    };
+    const btn = document.getElementById('rm-save-btn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      if (id) await api.put(`/restaurants/${id}`, body);
+      else    await api.post('/restaurants', body);
+      closeModal('restaurant-modal');
+      showToast(id ? 'Restaurant updated' : 'Restaurant added', 'success');
+      renderRestaurants(); loadStats();
+    } catch(e) { showToast(e.message, 'error'); }
+    btn.disabled = false; btn.textContent = 'Save';
+  }
+
+  async function deleteRestaurant(id) {
+    if (!confirm('Delete this restaurant and all its menu items?')) return;
+    try {
+      await api.delete(`/restaurants/${id}`);
+      showToast('Restaurant deleted', 'success');
+      renderRestaurants(); loadStats();
+    } catch(e) { showToast(e.message, 'error'); }
+  }
+
+  // ── Food items tab ─────────────────────────────────────────
+  async function renderItems() {
+    const restaurants = await api.get('/restaurants');
+    allRestaurantsCache = restaurants;
+    // Flatten all items
+    const allItems = restaurants.flatMap(r => (r.food_items || []).map(i => ({ ...i, restaurant_name: r.name })));
+    const content = document.getElementById('tab-content');
+    content.innerHTML = `
+      <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+        <button class="btn btn-primary btn-sm" onclick="openItemModal()">+ Add Food Item</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="admin-table">
+          <thead><tr><th>Item</th><th>Restaurant</th><th>Category</th><th>Price</th><th>Available</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${allItems.map(item => `
+              <tr>
+                <td>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <img src="${item.image_url||''}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;background:var(--surface-3)">
+                    <strong style="font-size:14px">${item.name}</strong>
+                  </div>
+                </td>
+                <td style="font-size:13px;color:var(--ink-3)">${item.restaurant_name}</td>
+                <td><span class="badge badge-gray" style="font-size:11px">${item.category||'—'}</span></td>
+                <td style="font-weight:700;color:var(--brand)">৳${item.price.toFixed(0)}</td>
+                <td>${item.is_available ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-gray">No</span>'}</td>
+                <td>
+                  <div style="display:flex;gap:6px">
+                    <button class="btn btn-ghost btn-sm" onclick='editItem(${JSON.stringify(item)})'>Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteItem(${item.food_id})">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  function openItemModal(item = null) {
+    document.getElementById('im-title').textContent = item ? 'Edit Food Item' : 'Add Food Item';
+    document.getElementById('im-id').value       = item?.food_id || '';
+    document.getElementById('im-name').value     = item?.name || '';
+    document.getElementById('im-price').value    = item?.price || '';
+    document.getElementById('im-category').value = item?.category || '';
+    document.getElementById('im-desc').value     = item?.description || '';
+    document.getElementById('im-image').value    = item?.image_url || '';
+    // Populate restaurant dropdown
+    const sel = document.getElementById('im-restaurant');
+    sel.innerHTML = allRestaurantsCache.map(r =>
+      `<option value="${r.restaurant_id}" ${item?.restaurant_id === r.restaurant_id ? 'selected' : ''}>${r.name}</option>`
+    ).join('');
+    document.getElementById('item-modal').classList.add('open');
+  }
+
+  function editItem(item) { openItemModal(item); }
+
+  async function saveItem(e) {
+    e.preventDefault();
+    const id  = document.getElementById('im-id').value;
+    const rid = document.getElementById('im-restaurant').value;
+    const body = {
+      name: document.getElementById('im-name').value,
+      price: parseFloat(document.getElementById('im-price').value),
+      category: document.getElementById('im-category').value,
+      description: document.getElementById('im-desc').value,
+      image_url: document.getElementById('im-image').value,
+    };
+    const btn = document.getElementById('im-save-btn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      if (id) await api.put(`/restaurants/items/${id}`, body);
+      else    await api.post(`/restaurants/${rid}/items`, body);
+      closeModal('item-modal');
+      showToast(id ? 'Item updated' : 'Item added', 'success');
+      renderItems();
+    } catch(e) { showToast(e.message, 'error'); }
+    btn.disabled = false; btn.textContent = 'Save';
+  }
+
+  async function deleteItem(id) {
+    if (!confirm('Delete this food item?')) return;
+    try {
+      await api.delete(`/restaurants/items/${id}`);
+      showToast('Item deleted', 'success');
+      renderItems();
+    } catch(e) { showToast(e.message, 'error'); }
+  }
+
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+  init();
+</script>
+</body>
+</html>

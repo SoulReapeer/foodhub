@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Restaurant — FoodHub</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div id="app">
+  <div id="restaurant-content">
+    <div class="loading-page"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- Cart Drawer -->
+<div class="cart-overlay" id="cart-overlay" onclick="closeCart()"></div>
+<div class="cart-drawer" id="cart-drawer">
+  <div class="cart-drawer__head">
+    <h3>🛒 Your Cart</h3>
+    <button class="cart-drawer__close" onclick="closeCart()">✕</button>
+  </div>
+  <div class="cart-drawer__body" id="cart-body"></div>
+  <div class="cart-drawer__foot" id="cart-foot"></div>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  renderNavbar('..');
+  const rid = new URLSearchParams(location.search).get('id');
+  if (!rid) window.location = '../index.html';
+
+  async function loadRestaurant() {
+    try {
+      const r = await api.get(`/restaurants/${rid}`);
+      renderPage(r);
+    } catch(e) {
+      document.getElementById('restaurant-content').innerHTML =
+        `<div class="page empty-state"><div class="empty-state__icon">😞</div><h3>Restaurant not found</h3><a href="../index.html" class="btn btn-primary" style="margin-top:16px">Back to Home</a></div>`;
+    }
+  }
+
+  function renderPage(r) {
+    // Group items by category
+    const cats = {};
+    (r.food_items || []).forEach(item => {
+      const cat = item.category || 'Menu';
+      if (!cats[cat]) cats[cat] = [];
+      cats[cat].push(item);
+    });
+
+    const catNavLinks = Object.keys(cats).map(cat =>
+      `<a href="#cat-${cat.replace(/\s/g,'-')}" style="padding:7px 16px;border-radius:999px;font-size:13px;font-weight:500;border:1.5px solid var(--border);background:var(--surface);color:var(--ink-2);text-decoration:none;transition:all .15s;white-space:nowrap" class="cat-nav-link">${cat}</a>`
+    ).join('');
+
+    const menuHTML = Object.entries(cats).map(([cat, items]) => `
+      <div id="cat-${cat.replace(/\s/g,'-')}" style="margin-bottom:2rem">
+        <h3 style="font-size:1.1rem;margin-bottom:14px;color:var(--ink-2);display:flex;align-items:center;gap:8px">
+          <span style="width:3px;height:18px;background:var(--brand);border-radius:2px;display:inline-block"></span>
+          ${cat}
+        </h3>
+        <div class="menu-grid">
+          ${items.map(item => `
+            <div class="food-card">
+              <img class="food-card__img" src="${item.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&q=80'}" alt="${item.name}" loading="lazy">
+              <div class="food-card__info">
+                <div class="food-card__name">${item.name}</div>
+                <div class="food-card__desc">${item.description || ''}</div>
+                <div class="food-card__footer">
+                  <div class="food-card__price">৳${item.price.toFixed(0)}</div>
+                  ${item.is_available
+                    ? `<div id="fc-${item.food_id}" class="food-card__qty-area">
+                         <button class="food-card__add" onclick="handleAdd(${JSON.stringify(item).replace(/"/g,'&quot;')})">+ Add</button>
+                       </div>`
+                    : `<span class="badge badge-gray">Unavailable</span>`
+                  }
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    document.getElementById('restaurant-content').innerHTML = `
+      <div class="restaurant-hero">
+        <img src="${r.image_url || 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&q=80'}" alt="${r.name}">
+        <div class="restaurant-hero__overlay">
+          <h1 class="restaurant-hero__name">${r.name}</h1>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="color:var(--amber);font-weight:600;font-size:14px">★ ${r.rating.toFixed(1)}</span>
+            <span style="color:rgba(255,255,255,.7);font-size:13px">·</span>
+            <span class="badge badge-brand" style="font-size:12px">${r.category || 'Restaurant'}</span>
+            <span style="color:rgba(255,255,255,.7);font-size:13px">·</span>
+            <span style="color:rgba(255,255,255,.85);font-size:13px">📍 ${r.location || ''}</span>
+            ${r.is_open ? '<span class="badge badge-green" style="font-size:12px">● Open</span>' : '<span class="badge badge-gray" style="font-size:12px">Closed</span>'}
+          </div>
+        </div>
+      </div>
+
+      <div class="page" style="padding-top:0">
+        ${r.description ? `<p style="color:var(--ink-2);font-size:15px;margin-bottom:24px;max-width:640px">${r.description}</p>` : ''}
+
+        <!-- Category nav -->
+        <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:28px;scrollbar-width:none">
+          ${catNavLinks}
+        </div>
+
+        <!-- Menu -->
+        ${menuHTML || '<div class="empty-state"><div class="empty-state__icon">🍽</div><h3>No items yet</h3></div>'}
+      </div>
+    `;
+
+    // Restore cart quantities on page
+    syncCartUI();
+    document.title = `${r.name} — FoodHub`;
+  }
+
+  function handleAdd(item) {
+    addToCart(item);
+    syncCartUI();
+    openCart();
+  }
+
+  function syncCartUI() {
+    const cart = getCart();
+    getCart().forEach(ci => {
+      const area = document.getElementById(`fc-${ci.food_id}`);
+      if (area) {
+        area.innerHTML = `
+          <div class="food-card__qty">
+            <button onclick="handleQtyChange(${ci.food_id}, -1)">−</button>
+            <span id="qty-${ci.food_id}">${ci.quantity}</span>
+            <button onclick="handleQtyChange(${ci.food_id}, +1)">+</button>
+          </div>`;
+      }
+    });
+  }
+
+  function handleQtyChange(food_id, delta) {
+    const cart = getCart();
+    const item = cart.find(c => c.food_id === food_id);
+    if (!item) return;
+    const newQty = item.quantity + delta;
+    if (newQty <= 0) {
+      removeFromCart(food_id);
+      const area = document.getElementById(`fc-${food_id}`);
+      const origItem = findOriginalItem(food_id);
+      if (area && origItem) {
+        area.innerHTML = `<button class="food-card__add" onclick="handleAdd(${JSON.stringify(origItem).replace(/"/g,'&quot;')})">+ Add</button>`;
+      }
+    } else {
+      updateQty(food_id, newQty);
+      const el = document.getElementById(`qty-${food_id}`);
+      if (el) el.textContent = newQty;
+    }
+    renderCartDrawer();
+  }
+
+  // Store original items for restoration
+  let _origItems = {};
+  function findOriginalItem(food_id) { return _origItems[food_id]; }
+
+  // Cart drawer
+  function openCart() {
+    document.getElementById('cart-overlay').classList.add('open');
+    document.getElementById('cart-drawer').classList.add('open');
+    renderCartDrawer();
+  }
+  function closeCart() {
+    document.getElementById('cart-overlay').classList.remove('open');
+    document.getElementById('cart-drawer').classList.remove('open');
+  }
+
+  function renderCartDrawer() {
+    const cart = getCart();
+    const body = document.getElementById('cart-body');
+    const foot = document.getElementById('cart-foot');
+    if (!cart.length) {
+      body.innerHTML = `<div class="cart-empty"><svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg><p>Your cart is empty</p></div>`;
+      foot.innerHTML = '';
+      return;
+    }
+    body.innerHTML = cart.map(ci => `
+      <div class="cart-item">
+        <img class="cart-item__img" src="${ci.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&q=80'}" alt="${ci.name}">
+        <div class="cart-item__info">
+          <div class="cart-item__name">${ci.name}</div>
+          <div class="cart-item__price">৳${ci.price.toFixed(0)} × ${ci.quantity} = <strong>৳${(ci.price * ci.quantity).toFixed(0)}</strong></div>
+        </div>
+        <button class="cart-item__remove" onclick="removeItem(${ci.food_id})">✕</button>
+      </div>
+    `).join('');
+
+    const delivery = 50;
+    const subtotal = cartTotal();
+    foot.innerHTML = `
+      <div class="cart-total-row"><span>Subtotal</span><span>৳${subtotal.toFixed(0)}</span></div>
+      <div class="cart-total-row"><span>Delivery fee</span><span>৳${delivery}</span></div>
+      <div class="cart-total-row grand"><span>Total</span><span>৳${(subtotal + delivery).toFixed(0)}</span></div>
+      <button class="btn btn-primary btn-full" style="margin-top:14px" onclick="window.location='cart.html'">Proceed to Checkout →</button>
+    `;
+  }
+
+  function removeItem(food_id) {
+    removeFromCart(food_id);
+    renderCartDrawer();
+    syncCartUI();
+  }
+
+  // Override cart badge click to open drawer instead of navigate (on this page)
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('nav-cart-btn');
+    if (btn) {
+      btn.onclick = (e) => { e.preventDefault(); openCart(); };
+    }
+  });
+
+  loadRestaurant();
+</script>
+</body>
+</html>

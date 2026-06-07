@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Account — FoodHub</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-page__left">
+    <div style="text-align:center">
+      <div style="font-size:5rem;margin-bottom:1.5rem">🍕</div>
+      <h1 style="color:white;font-size:2.5rem;margin-bottom:1rem">Join FoodHub</h1>
+      <p style="color:rgba(255,255,255,.75);font-size:1.1rem;max-width:300px;margin:0 auto">
+        Create your free account and start ordering from hundreds of local restaurants.
+      </p>
+    </div>
+  </div>
+
+  <div class="auth-page__right">
+    <div class="auth-form">
+      <a href="../index.html" style="display:inline-flex;align-items:center;gap:6px;font-size:1.2rem;font-family:'Playfair Display',serif;font-weight:900;color:var(--brand);margin-bottom:2rem;text-decoration:none">
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--brand);display:inline-block"></span>
+        FoodHub
+      </a>
+      <h2 class="auth-form__title">Create account</h2>
+      <p class="auth-form__sub">Free forever. No credit card required.</p>
+
+      <div id="error-msg" style="display:none;background:#fee2e2;color:#b91c1c;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px"></div>
+
+      <div class="form-group">
+        <label class="form-label">Full name</label>
+        <input class="form-input" type="text" id="name" placeholder="Rahim Uddin" autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email address</label>
+        <input class="form-input" type="email" id="email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone (optional)</label>
+        <input class="form-input" type="tel" id="phone" placeholder="01700000000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" type="password" id="password" placeholder="Min. 6 characters" autocomplete="new-password">
+        <div id="pwd-strength" style="height:3px;border-radius:2px;background:var(--border);margin-top:6px;transition:all .3s"><div id="pwd-bar" style="height:100%;border-radius:2px;width:0;transition:all .3s"></div></div>
+      </div>
+
+      <button class="btn btn-primary btn-full" id="signup-btn" onclick="doSignup()">Create account</button>
+
+      <p style="text-align:center;font-size:14px;color:var(--ink-3);margin-top:1.5rem">
+        Already have an account? <a href="login.html" style="color:var(--brand);font-weight:600">Sign in</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  if (isLoggedIn()) window.location = '../index.html';
+
+  document.getElementById('password').addEventListener('input', function() {
+    const v = this.value, bar = document.getElementById('pwd-bar');
+    let score = 0;
+    if (v.length >= 6)  score++;
+    if (v.length >= 10) score++;
+    if (/[A-Z]/.test(v) && /[0-9]/.test(v)) score++;
+    const colors = ['#e53e3e','#e8a317','#1a7a4a'];
+    const widths  = ['33%','66%','100%'];
+    bar.style.width  = score ? widths[score-1] : '0';
+    bar.style.background = score ? colors[score-1] : '';
+  });
+
+  async function doSignup() {
+    const name     = document.getElementById('name').value.trim();
+    const email    = document.getElementById('email').value.trim();
+    const phone    = document.getElementById('phone').value.trim();
+    const password = document.getElementById('password').value;
+    const errEl    = document.getElementById('error-msg');
+    const btn      = document.getElementById('signup-btn');
+
+    errEl.style.display = 'none';
+    if (!name || !email || !password) { errEl.textContent = 'Name, email and password are required.'; errEl.style.display = 'block'; return; }
+    if (password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
+
+    btn.disabled = true; btn.textContent = 'Creating account…';
+    try {
+      const data = await api.post('/auth/register', { name, email, password, phone });
+      saveAuth(data.token, data.user);
+      window.location = '../index.html';
+    } catch(e) {
+      errEl.textContent = e.message || 'Registration failed';
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Create account';
+    }
+  }
+</script>
+</body>
+</html>

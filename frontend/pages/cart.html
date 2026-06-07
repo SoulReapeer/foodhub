@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cart — FoodHub</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div id="app" class="page">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px">
+    <a href="../index.html" style="color:var(--ink-3);font-size:13px;display:flex;align-items:center;gap:4px">← Back</a>
+    <h2>Your Cart</h2>
+    <span id="item-count" class="badge badge-brand"></span>
+  </div>
+
+  <div id="cart-layout" style="display:grid;grid-template-columns:1fr min(360px,100%);gap:24px;align-items:start">
+    <!-- Items -->
+    <div>
+      <div id="cart-items-list"></div>
+    </div>
+
+    <!-- Summary + Checkout -->
+    <div id="order-summary">
+      <!-- Rendered by JS -->
+    </div>
+  </div>
+</div>
+
+<!-- Order success modal -->
+<div class="modal-overlay" id="success-modal">
+  <div class="modal" style="text-align:center">
+    <div style="font-size:3.5rem;margin-bottom:1rem">🎉</div>
+    <h2 style="margin-bottom:8px">Order Placed!</h2>
+    <p style="color:var(--ink-3);margin-bottom:1.5rem;font-size:15px">Your order is confirmed and is being prepared. You can track it in My Orders.</p>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="btn btn-primary" onclick="window.location='orders.html'">Track Order</button>
+      <button class="btn btn-ghost" onclick="window.location='../index.html'">Back to Home</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  renderNavbar('..');
+
+  function render() {
+    const cart = getCart();
+    const count = document.getElementById('item-count');
+    count.textContent = `${cart.length} item${cart.length !== 1 ? 's' : ''}`;
+
+    if (!cart.length) {
+      document.getElementById('cart-layout').innerHTML = `
+        <div class="empty-state" style="grid-column:1/-1;padding:80px 0">
+          <div class="empty-state__icon">🛒</div>
+          <h3>Your cart is empty</h3>
+          <p>Add some delicious items to get started</p>
+          <a href="../index.html" class="btn btn-primary" style="margin-top:20px;display:inline-flex">Browse Restaurants</a>
+        </div>`;
+      return;
+    }
+
+    renderItems(cart);
+    renderSummary(cart);
+  }
+
+  function renderItems(cart) {
+    document.getElementById('cart-items-list').innerHTML = cart.map(ci => `
+      <div class="card" style="margin-bottom:12px;border-radius:var(--radius-md);box-shadow:var(--shadow-sm)">
+        <div style="display:flex;gap:16px;padding:16px;align-items:flex-start">
+          <img src="${ci.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&q=80'}" 
+               alt="${ci.name}" style="width:80px;height:80px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0">
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:15px;margin-bottom:3px">${ci.name}</div>
+            <div style="font-size:13px;color:var(--ink-3);margin-bottom:12px">৳${ci.price.toFixed(0)} each</div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div class="food-card__qty">
+                <button onclick="changeQty(${ci.food_id}, -1)">−</button>
+                <span id="qty-${ci.food_id}">${ci.quantity}</span>
+                <button onclick="changeQty(${ci.food_id}, +1)">+</button>
+              </div>
+              <div style="font-weight:700;color:var(--brand);font-size:16px" id="subtotal-${ci.food_id}">
+                ৳${(ci.price * ci.quantity).toFixed(0)}
+              </div>
+            </div>
+          </div>
+          <button onclick="removeItem(${ci.food_id})" style="color:var(--ink-3);font-size:16px;background:none;border:none;cursor:pointer;padding:4px;transition:color .15s;flex-shrink:0" onmouseover="this.style.color='#b91c1c'" onmouseout="this.style.color='var(--ink-3)'">✕</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderSummary(cart) {
+    const delivery = 50;
+    const subtotal = cartTotal();
+    const total    = subtotal + delivery;
+    const user     = getUser();
+
+    document.getElementById('order-summary').innerHTML = `
+      <div class="card" style="padding:24px;border-radius:var(--radius-lg);position:sticky;top:calc(var(--nav-h) + 16px)">
+        <h3 style="font-size:1.1rem;margin-bottom:16px">Order Summary</h3>
+        
+        ${cart.map(ci => `
+          <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--ink-3);margin-bottom:6px">
+            <span>${ci.name} × ${ci.quantity}</span>
+            <span>৳${(ci.price * ci.quantity).toFixed(0)}</span>
+          </div>
+        `).join('')}
+
+        <div style="border-top:1px dashed var(--border);margin:14px 0;padding-top:14px">
+          <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px">
+            <span>Subtotal</span><span>৳${subtotal.toFixed(0)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;color:var(--ink-3)">
+            <span>Delivery fee</span><span>৳${delivery}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:17px;font-weight:700;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+            <span>Total</span><span style="color:var(--brand)">৳${total.toFixed(0)}</span>
+          </div>
+        </div>
+
+        <div style="background:var(--surface-3);border-radius:var(--radius-md);padding:14px;margin-bottom:16px">
+          <div style="font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:10px">Delivery details</div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label class="form-label" style="font-size:12px">Delivery address</label>
+            <textarea class="form-input" id="delivery-addr" rows="2" placeholder="Street, area, city…" style="resize:none">${user?.address || ''}</textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label" style="font-size:12px">Payment method</label>
+            <select class="form-input" id="payment-method" style="font-size:14px;padding:9px 12px">
+              <option value="cash_on_delivery">💵 Cash on Delivery</option>
+            </select>
+          </div>
+        </div>
+
+        ${isLoggedIn()
+          ? `<button class="btn btn-primary btn-full btn-lg" onclick="placeOrder()">Place Order · ৳${total.toFixed(0)}</button>`
+          : `<a href="login.html" class="btn btn-primary btn-full btn-lg" style="display:block;text-align:center">Sign in to Order</a>`
+        }
+
+        <div style="display:flex;align-items:center;gap:6px;justify-content:center;margin-top:12px;font-size:12px;color:var(--ink-3)">
+          🔒 Secure · No hidden charges
+        </div>
+      </div>
+    `;
+  }
+
+  function changeQty(food_id, delta) {
+    const cart = getCart();
+    const item = cart.find(c => c.food_id === food_id);
+    if (!item) return;
+    item.quantity += delta;
+    if (item.quantity <= 0) { removeFromCart(food_id); render(); return; }
+    saveCart(cart);
+    const qtyEl = document.getElementById(`qty-${food_id}`);
+    const subEl = document.getElementById(`subtotal-${food_id}`);
+    if (qtyEl) qtyEl.textContent = item.quantity;
+    if (subEl) subEl.textContent = `৳${(item.price * item.quantity).toFixed(0)}`;
+    renderSummary(getCart());
+  }
+
+  function removeItem(food_id) {
+    removeFromCart(food_id);
+    render();
+  }
+
+  async function placeOrder() {
+    const addr = document.getElementById('delivery-addr')?.value?.trim();
+    const pm   = document.getElementById('payment-method')?.value;
+    if (!addr) { showToast('Please enter your delivery address', 'error'); return; }
+
+    const btn = document.querySelector('.btn-primary[onclick="placeOrder()"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Placing order…'; }
+
+    try {
+      const cart = getCart();
+      await api.post('/orders', {
+        items: cart.map(ci => ({ food_id: ci.food_id, quantity: ci.quantity })),
+        delivery_address: addr,
+        payment_method: pm
+      });
+      clearCart();
+      document.getElementById('success-modal').classList.add('open');
+    } catch(e) {
+      showToast(e.message || 'Failed to place order', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = `Place Order · ৳${(cartTotal() + 50).toFixed(0)}`; }
+    }
+  }
+
+  render();
+</script>
+</body>
+</html>

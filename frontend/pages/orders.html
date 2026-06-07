@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Orders — FoodHub</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="page">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px;flex-wrap:wrap">
+    <h2>My Orders</h2>
+    <span id="orders-count" class="badge badge-brand"></span>
+  </div>
+
+  <div id="orders-list">
+    <div class="loading-page"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  renderNavbar('..');
+  if (!requireAuth()) void 0;
+
+  const STEPS = ['pending','accepted','preparing','out_for_delivery','delivered'];
+
+  async function loadOrders() {
+    try {
+      const orders = await api.get('/orders/my');
+      const el = document.getElementById('orders-list');
+      document.getElementById('orders-count').textContent = `${orders.length} order${orders.length !== 1 ? 's' : ''}`;
+
+      if (!orders.length) {
+        el.innerHTML = `<div class="empty-state"><div class="empty-state__icon">📦</div><h3>No orders yet</h3><p>Your order history will appear here.</p><a href="../index.html" class="btn btn-primary" style="margin-top:20px;display:inline-flex">Order Now</a></div>`;
+        return;
+      }
+
+      el.innerHTML = orders.map(o => {
+        const stepIdx    = STEPS.indexOf(o.status);
+        const isCancelled = o.status === 'cancelled';
+        const progressHTML = isCancelled ? '' : `
+          <div class="order-progress" style="margin:20px 0">
+            ${STEPS.map((step, i) => {
+              const isDone   = i < stepIdx;
+              const isActive = i === stepIdx;
+              const labels   = ['Placed','Accepted','Preparing','On the way','Delivered'];
+              return `
+                ${i > 0 ? `<div class="order-progress__line${isDone ? ' done' : ''}"></div>` : ''}
+                <div class="order-progress__step">
+                  <div class="order-progress__dot${isDone ? ' done' : ''}${isActive ? ' active' : ''}"></div>
+                  <div class="order-progress__label">${labels[i]}</div>
+                </div>`;
+            }).join('')}
+          </div>`;
+
+        const itemsList = (o.items || []).map(item =>
+          `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+            <img src="${item.food_image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80'}" alt="${item.food_name}" style="width:42px;height:42px;border-radius:6px;object-fit:cover;flex-shrink:0">
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:600">${item.food_name || '—'}</div>
+              <div style="font-size:12px;color:var(--ink-3)">Qty ${item.quantity} · ৳${item.unit_price} each</div>
+            </div>
+            <div style="font-weight:700;font-size:14px">৳${item.subtotal}</div>
+          </div>`
+        ).join('');
+
+        return `
+          <div class="order-card" id="order-${o.order_id}">
+            <div class="order-card__head">
+              <div>
+                <div class="order-card__id">Order #${o.order_id}</div>
+                <div class="order-card__date">${formatDate(o.created_at)}</div>
+              </div>
+              <div style="text-align:right">
+                <span class="badge ${`status-${o.status}`}">${statusLabel(o.status)}</span>
+                <div style="font-size:18px;font-weight:700;margin-top:6px;color:var(--brand)">৳${o.total_price.toFixed(0)}</div>
+              </div>
+            </div>
+
+            ${progressHTML}
+
+            <div style="margin-bottom:14px">
+              ${itemsList}
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <div style="font-size:13px;color:var(--ink-3);flex:1">
+                📍 ${o.delivery_address || '—'} · 💵 ${o.payment_method === 'cash_on_delivery' ? 'Cash on Delivery' : o.payment_method}
+              </div>
+              <a href="../index.html" class="btn btn-ghost btn-sm">Reorder</a>
+            </div>
+          </div>`;
+      }).join('');
+
+    } catch(e) {
+      document.getElementById('orders-list').innerHTML =
+        `<div class="empty-state"><div class="empty-state__icon">⚠️</div><h3>Could not load orders</h3><p>${e.message}</p></div>`;
+    }
+  }
+
+  loadOrders();
+  // Poll for status updates every 30 seconds
+  setInterval(loadOrders, 30000);
+</script>
+</body>
+</html>
